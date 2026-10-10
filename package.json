@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "smoke": "vitest run src/engine/generate.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

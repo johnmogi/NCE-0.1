@@ -6,7 +6,8 @@ import { exportableRun, generateRun, inspectTile } from "@/engine/generate";
 import type { ContentRecord, RunState } from "@/engine/types";
 
 const heroes = recordsOf("hero");
-
+const roomLabels = { start: "START", royal: "ROYAL", challenger: "CHALLENGE", barrier: "BARRIER", treasure: "TREASURE" } as const;
+const elementGlyph: Record<string, string> = { air: "◈", fire: "✦", water: "≈", earth: "◆" };
 function json(value: unknown) { return JSON.stringify(value, null, 2); }
 
 export default function AdminDashboard() {
@@ -15,91 +16,28 @@ export default function AdminDashboard() {
   const [run, setRun] = useState<RunState | null>(null);
   const [selected, setSelected] = useState<ContentRecord | null>(null);
   const [error, setError] = useState("");
-
-  const counts = useMemo(() => {
-    const values = run?.tiles.reduce<Record<string, number>>((result, tile) => {
-      result[tile.roomType] = (result[tile.roomType] ?? 0) + 1;
-      return result;
-    }, {}) ?? {};
-    return values;
-  }, [run]);
-
-  function generate() {
-    try {
-      const next = generateRun(Number(seed), heroId);
-      setRun(next);
-      setSelected(null);
-      setError("");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Generation failed"); }
-  }
-
-  function inspect(roomId: string) {
-    if (!run) return;
-    const tile = run.tiles.find((candidate) => candidate.roomId === roomId);
-    setSelected(tile?.content ?? null);
-    setRun(inspectTile(run, roomId));
-  }
-
-  async function copyJson() {
-    if (!run) return;
-    await navigator.clipboard.writeText(json(exportableRun(run)));
-    setRun({ ...run, log: [...run.log, { id: `log-${run.log.length + 1}`, action: "copy", message: "Copied run JSON to clipboard." }] });
-  }
-
-  function exportJson() {
-    if (!run) return;
-    const blob = new Blob([json(exportableRun(run))], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${run.runId}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setRun({ ...run, log: [...run.log, { id: `log-${run.log.length + 1}`, action: "export", message: "Exported run JSON." }] });
-  }
-
-  function reset() { setRun(null); setSelected(null); setError(""); }
-
-  return <main className="shell">
-    <section className="crt">
-      <header className="header">
-        <div><h1>NCE / ADAM&apos;S BORING FIELD GUIDE</h1><small>NCE Classic v0.1 / Checkpoint 1 / GODMODE</small></div>
-        <span className="status">ADMIN ENGINE ONLINE</span>
-      </header>
-      <nav className="toolbar">
-        <button onClick={generate}>GENERATE</button>
-        <button disabled>PLAY / COMING SOON</button>
-        <button onClick={reset}>RESET</button>
-        <button disabled>SIMULATE / COMING SOON</button>
-        <button onClick={copyJson} disabled={!run}>COPY JSON</button>
-        <button onClick={exportJson} disabled={!run}>EXPORT RUN</button>
-      </nav>
-      <div className="layout">
-        <aside className="panel">
-          <h2>SETTINGS</h2>
-          <div className="field"><label htmlFor="seed">Seed</label><input id="seed" value={seed} onChange={(event) => setSeed(event.target.value)} /></div>
-          <div className="field"><label>Board</label><div className="muted">3 columns x 5 rows / 15 tiles</div></div>
-          <div className="field"><label>Room mix</label><div className="muted">Start 1 / Royal 1<br />Treasure 4 / Barrier 4<br />Challenger 5</div></div>
-          <div className="field"><label>Hero selection</label>{heroes.map((hero) => <button key={hero.id} className={`hero-option ${hero.id === heroId ? "selected" : ""}`} onClick={() => setHeroId(hero.id)}><strong>{hero.name}</strong><span>{hero.element} / base value 1</span></button>)}</div>
-          <div className="field"><label>Rules</label><div className="muted">Resolution deferred.<br />No dice, health, hand, or combat.</div></div>
-        </aside>
-        <section className="grid-wrap">
-          <h2>GRID / GODMODE</h2>
-          {!run ? <p className="muted">No run generated. Select an Ace Hero and press GENERATE.</p> : <>
-            <div className="board">{run.tiles.map((tile) => <button key={tile.roomId} className={`tile ${tile.roomType} ${tile.inspected ? "inspected" : ""}`} onClick={() => inspect(tile.roomId)}><span className="coord">{tile.roomId}</span><span className="type">{tile.roomType}</span>{tile.content && <><span className="value">{tile.content.value || ""}</span><span className="name">{tile.content.name}</span></>}</button>)}</div>
-            <div className="route">VALID ROUTE: {run.route.join(" -> ")}</div>
-          </>}
-          {error && <div className="error">ERROR: {error}</div>}
-        </section>
-        <aside className="panel">
-          <h2>STATS</h2>
-          <div className="stats"><div className="stat"><b>{run ? 1 : 0}</b>Runs</div><div className="stat"><b>--</b>Win %</div><div className="stat"><b>--</b>Health</div><div className="stat"><b>{run?.tiles.length ?? 0}</b>Tiles</div></div>
-          {run && <><h2>RUN STATE</h2><div className="muted">Seed: {run.seed}<br />Hero: {run.heroId}<br />Route valid: {String(run.routeValid)}<br />Counts: {json(counts)}</div></>}
-          <h2>INSPECTOR</h2><div className="inspector">{selected ? json(selected) : "Click a tile to inspect generated content. Inspection is GODMODE UI state only."}</div>
-          <h2>EVENT LOG</h2><div className="log">{run?.log.map((entry) => <div className="log-entry" key={entry.id}>[{entry.id}] {entry.message}</div>) ?? <span className="muted">No events.</span>}</div>
-        </aside>
-      </div>
-    </section>
-    <p className="muted">Checkpoint 1 intentionally stops before Barrier resolution, Treasure use, Challenger resolution, and PLAY mode.</p>
-  </main>;
+  const [view, setView] = useState<"godmode" | "compendium" | "play" | "data">("godmode");
+  const [compendiumFilter, setCompendiumFilter] = useState<ContentRecord["type"] | "all">("all");
+  const counts = useMemo(() => run?.tiles.reduce<Record<string, number>>((result, tile) => { result[tile.roomType] = (result[tile.roomType] ?? 0) + 1; return result; }, {}) ?? {}, [run]);
+  const selectedTile = run?.tiles.find((tile) => tile.content?.id === selected?.id);
+  const visibleRecords = compendiumFilter === "all" ? catalog : catalog.filter((record) => record.type === compendiumFilter);
+  const activeHero = heroes.find((hero) => hero.id === heroId) ?? heroes[0];
+  function generate() { try { const next = generateRun(Number(seed), heroId); setRun(next); setSelected(null); setError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Generation failed"); } }
+  function inspect(roomId: string) { if (!run) return; const tile = run.tiles.find((candidate) => candidate.roomId === roomId); setSelected(tile?.content ?? null); setRun(inspectTile(run, roomId)); }
+  async function copyJson() { if (!run) return; await navigator.clipboard.writeText(json(exportableRun(run))); setRun({ ...run, log: [...run.log, { id: `log-${run.log.length + 1}`, action: "copy", message: "Copied run JSON to clipboard." }] }); }
+  function exportJson() { if (!run) return; const blob = new Blob([json(exportableRun(run))], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${run.runId}.json`; link.click(); URL.revokeObjectURL(url); setRun({ ...run, log: [...run.log, { id: `log-${run.log.length + 1}`, action: "export", message: "Exported run JSON." }] }); }
+  function reset() { setRun(null); setSelected(null); setError(""); setView("godmode"); }
+  return <main className="app-shell"><div className="scanline" aria-hidden="true" /><section className="console-frame">
+    <header className="topbar"><div className="brand-lockup"><div className="brand-mark">N</div><div><div className="brand-name">NCE <span>/</span> ADAM&apos;S BORING FIELD GUIDE</div><div className="brand-sub">NEXUS CENTRAL ENGINE · CLASSIC v0.1 · LV00</div></div></div><div className="top-meta"><span className="live-dot" /> <span>ADMIN ENGINE ONLINE</span><span className="meta-divider" />SEED {run?.seed ?? "——"}</div></header>
+    <nav className="mode-tabs" aria-label="Console views">{([["godmode", "GODMODE"], ["compendium", "CONTENT COMPENDIUM"], ["play", "PLAY / PREVIEW"], ["data", "RUN DATA"]] as const).map(([key, label], index) => <button key={key} className={view === key ? "active" : ""} onClick={() => setView(key)}><span>0{index + 1}</span> {label}</button>)}<div className="tab-spacer" /><span className="build-chip">CHECKPOINT 01 · NO RESOLUTION</span></nav>
+    <div className="actionbar"><div className="action-group"><button className="button-primary" onClick={generate}><span className="button-glyph">+</span> GENERATE RUN</button><button onClick={reset}>RESET</button><button disabled title="Coming soon">SIMULATE <em>SOON</em></button></div><div className="action-group"><button disabled={!run} onClick={copyJson}>COPY JSON</button><button disabled={!run} onClick={exportJson}>EXPORT RUN <span className="button-glyph">↗</span></button></div></div>
+    {view === "godmode" && <div className="godmode-layout"><aside className="control-rail"><div className="section-kicker">CONTROL DECK <span>01</span></div><h2>SETTINGS</h2><div className="field"><label htmlFor="seed">RUN SEED <span>INTEGER</span></label><input id="seed" value={seed} onChange={(event) => setSeed(event.target.value)} /></div><div className="field"><label>BOARD PRESET <span>LOCKED</span></label><div className="setting-readout"><strong>3 × 5</strong><span>15 TILE GRID</span></div></div><div className="field"><label>ROOM MIX <span>FIXED</span></label><div className="mix-list"><span><i className="legend-dot treasure" />TREASURE <b>04</b></span><span><i className="legend-dot barrier" />BARRIER <b>04</b></span><span><i className="legend-dot challenger" />CHALLENGER <b>05</b></span></div></div><div className="field"><label>ACE HERO <span>SELECT ONE</span></label><div className="hero-stack">{heroes.map((hero) => <button key={hero.id} className={`hero-option ${hero.id === heroId ? "selected" : ""}`} onClick={() => setHeroId(hero.id)}><span className="hero-glyph">{elementGlyph[hero.element]}</span><span><strong>{hero.name}</strong><small>{hero.element} lineage · base value 1</small></span><b className="hero-check">{hero.id === heroId ? "●" : "○"}</b></button>)}</div></div><div className="rules-note"><span className="note-icon">i</span><div><strong>RULES DEFERRED</strong><p>No dice, health, hand, or combat resolution in LV00.</p></div></div></aside>
+      <section className="board-stage"><div className="stage-heading"><div><div className="section-kicker">MASTER GENERATOR <span>02</span></div><h1>GRID <span>/</span> GODMODE</h1><p>Every room revealed. Nothing is hidden from the operator.</p></div><div className="run-badge"><span className={run ? "signal-on" : "signal-off"} />{run ? "RUN ACTIVE" : "AWAITING RUN"}<small>{run ? run.runId : "NO OUTPUT"}</small></div></div>{!run ? <div className="empty-board"><div className="empty-glyph">◌</div><h2>NO RUN IN MEMORY</h2><p>Select an Ace Hero, set a seed, and generate the first deterministic board.</p><button className="button-primary" onClick={generate}>GENERATE FIRST RUN <span className="button-glyph">→</span></button></div> : <><div className="board-wrap"><div className="board-axis top"><span>0</span><span>1</span><span>2</span></div><div className="board"><div className="row-axis"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span></div>{run.tiles.map((tile) => <button key={tile.roomId} className={`tile tile-${tile.roomType} ${tile.inspected ? "inspected" : ""} ${selectedTile?.roomId === tile.roomId ? "focused" : ""}`} onClick={() => inspect(tile.roomId)}><span className="tile-corner">{tile.roomId.replace("room-", "#")}</span><span className="tile-symbol">{tile.roomType === "start" ? "⌄" : tile.roomType === "royal" ? "♛" : tile.roomType === "treasure" ? "◇" : tile.roomType === "barrier" ? "▥" : "✧"}</span><span className="tile-type">{roomLabels[tile.roomType]}</span>{tile.content && <><span className="tile-value">{tile.content.value || "—"}</span><span className="tile-name">{tile.content.name}</span><span className="tile-element">{elementGlyph[tile.content.element]} {tile.content.element.toUpperCase()}</span></>}</button>)}</div></div><div className="route-strip"><span className="route-label">VALID ROUTE</span><span>{run.route.map((roomId, index) => <span key={roomId}><b>{roomId.replace("room-", "")}</b>{index < run.route.length - 1 && <i>→</i>}</span>)}</span><span className="route-ok">ORTHOGONAL · PASS</span></div></>}{error && <div className="error">ERROR / {error}</div>}<div className="event-strip"><div><span className="section-kicker">EVENT LOG <span>03</span></span><strong>{run?.log.length ?? 0} EVENTS</strong></div><div className="event-preview">{run?.log.slice(-2).map((entry) => <span key={entry.id}><b>{entry.id.replace("log-", "#")}</b> {entry.message}</span>) ?? <span>Generation actions will appear here.</span>}</div></div></section>
+      <aside className="inspector-rail"><div className="section-kicker">LIVE OUTPUT <span>04</span></div><div className="inspector-title"><h2>INSPECTOR</h2><span className="inspector-status">{selected ? "SELECTED" : "IDLE"}</span></div>{selected ? <div className="inspector-card"><div className={`inspector-card-top element-${selected.element}`}><span className="large-glyph">{elementGlyph[selected.element]}</span><div><span>{selected.type.toUpperCase()} · {selected.rank}</span><strong>{selected.name}</strong></div><b>{selected.value}</b></div><div className="inspector-details"><div><span>CONTENT ID</span><strong>{selected.id}</strong></div><div><span>ROOM ID</span><strong>{selectedTile?.roomId ?? "—"}</strong></div><div><span>FAMILY</span><strong>{selected.family}</strong></div><div><span>TAGS</span><strong>{selected.tags.join(" · ")}</strong></div></div><pre>{json(selected)}</pre></div> : <div className="inspector-idle"><div className="idle-bracket">[&nbsp; ? &nbsp;]</div><strong>SELECT A TILE</strong><p>Click any generated room to reveal its content record and stable IDs.</p></div>}<div className="stats-module"><div className="section-kicker">RUN TELEMETRY</div><div className="stat-grid"><div><strong>{run ? "001" : "000"}</strong><span>RUNS</span></div><div><strong>—</strong><span>WIN %</span></div><div><strong>—</strong><span>HEALTH</span></div><div><strong>{run?.tiles.length ?? "00"}</strong><span>TILES</span></div></div>{run && <div className="telemetry-lines"><span><b>ROUTE</b>{run.routeValid ? "VALID" : "INVALID"}</span><span><b>ROOMS</b>{Object.entries(counts).map(([key, value]) => `${key} ${value}`).join(" / ")}</span></div>}</div></aside></div>}
+    {view === "compendium" && <Compendium records={visibleRecords} filter={compendiumFilter} setFilter={setCompendiumFilter} />}{view === "play" && <PlayPreview run={run} hero={activeHero} />}{view === "data" && <RunData run={run} />}
+  </section><footer className="app-footer"><span>NCE // LIVING TERMINAL COMPENDIUM</span><span>CONTENT v1 · RULES v1 · LOCAL SESSION</span></footer></main>;
 }
+
+function Compendium({ records, filter, setFilter }: { records: ContentRecord[]; filter: ContentRecord["type"] | "all"; setFilter: (filter: ContentRecord["type"] | "all") => void }) { const filters: Array<ContentRecord["type"] | "all"> = ["all", "hero", "challenger", "royal", "barrier", "treasure"]; return <section className="compendium-view"><div className="compendium-head"><div><div className="section-kicker">NCE CLASSIC / CONTENT INDEX <span>02</span></div><h1>CONTENT COMPENDIUM</h1><p>76 records · four elemental lineages · the complete LV00 catalog.</p></div><div className="catalog-count"><strong>{records.length}</strong><span>VISIBLE RECORDS</span></div></div><div className="filter-row">{filters.map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "all" ? "ALL RECORDS" : item.toUpperCase()}</button>)}</div><div className="record-grid">{records.map((record) => <article className={`record-card element-${record.element}`} key={record.id}><div className="record-meta"><span>{record.type.toUpperCase()}</span><b>{record.rank}</b></div><div className="record-icon">{elementGlyph[record.element]}</div><h2>{record.name}</h2><p>{record.family} · {record.element} lineage</p><div className="record-footer"><span>{record.id}</span><strong>VALUE {record.value}</strong></div></article>)}</div></section>; }
+function PlayPreview({ run, hero }: { run: RunState | null; hero: ContentRecord }) { return <section className="play-view"><div className="preview-banner"><div><div className="section-kicker">STATIC PREVIEW / FUTURE SURFACE <span>03</span></div><h1>PLAY MODE <em>COMING SOON</em></h1><p>Read-only orientation for the future player-facing journey. Engine resolution is intentionally absent.</p></div><div className="preview-stamp">NOT<br />CONNECTED</div></div><div className="play-layout"><div className="player-card"><div className="section-kicker">ACTIVE ACE</div><div className="player-icon">{elementGlyph[hero.element]}</div><h2>{hero.name}</h2><p>{hero.family} · {hero.element} lineage</p><div className="fake-stats"><span>HP <b>—</b></span><span>HAND <b>—</b></span><span>SUGAR <b>—</b></span></div></div><div className="path-preview"><div className="section-kicker">ADVENTURE PATH / READ ONLY</div><div className="path-line">{(run?.tiles ?? []).map((tile) => <div key={tile.roomId} className={`path-node ${tile.roomType}`}><span>{tile.roomType === "royal" ? "♛" : tile.roomType === "start" ? "⌄" : "·"}</span><small>{tile.roomId.replace("room-", "")}</small></div>)}</div><div className="preview-note">The 3 × 5 board becomes a bottom-to-top journey in PLAY. Tap any room to advance once resolution exists.</div></div></div></section>; }
+function RunData({ run }: { run: RunState | null }) { return <section className="data-view"><div className="data-head"><div><div className="section-kicker">DEBUG SURFACE / EXPORTABLE STATE <span>04</span></div><h1>RUN DATA <span>/ JSON INSPECTOR</span></h1><p>Exact generated state. Read-only view of the current session.</p></div><div className="data-status">{run ? "STATE LOADED" : "NO STATE"}</div></div><div className="data-columns"><div className="data-summary"><div className="summary-block"><span>RUN ID</span><strong>{run?.runId ?? "—"}</strong></div><div className="summary-block"><span>SEED</span><strong>{run?.seed ?? "—"}</strong></div><div className="summary-block"><span>CONTENT VERSION</span><strong>{run?.contentVersion ?? "—"}</strong></div><div className="summary-block"><span>RULES VERSION</span><strong>{run?.rulesVersion ?? "—"}</strong></div><div className="summary-block"><span>CREATED AT</span><strong>{run?.createdAt ?? "—"}</strong></div></div><pre className="json-view">{run ? json(exportableRun(run)) : "Generate a run to inspect exportable JSON."}</pre></div></section>; }
