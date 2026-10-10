@@ -6,6 +6,12 @@
 **Scope:** Deterministic board generation, transparent GODMODE inspection, and JSON export  
 **Gameplay resolution:** Not implemented
 
+## Authority
+
+This document is the implementation authority for Checkpoint 1.
+
+If another document conflicts with this one, this document wins for the Checkpoint 1 milestone. The decision interview is a design backlog only; its recommendations are not implementation requirements until separately approved.
+
 ---
 
 ## 1. Platform
@@ -239,7 +245,7 @@ The engine must reject or report:
 - Missing Royal Boss / Exit tile
 - Incorrect room distribution
 - Duplicate room IDs
-- Duplicate content IDs in positions where uniqueness is required
+- Duplicate content IDs, unless the content definition explicitly permits duplication
 - Invalid tile coordinates
 - No valid Start-to-Exit path
 - Missing content record
@@ -274,5 +280,7 @@ Checkpoint 1 passes when:
 - Room exhaustion as gameplay state
 - Persistence beyond browser/session storage
 - Database integration
+
+No content record may appear more than once in a generated run unless its content definition explicitly permits duplication. The current NCE Classic content package does not permit duplication, so the 15 generated rooms must use distinct content records where a room has a content record.
 
 The next design contract should define Barrier resolution, followed by Treasure / hand economy, followed by the Challenger loop.

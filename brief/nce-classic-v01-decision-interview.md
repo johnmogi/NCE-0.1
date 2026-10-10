@@ -6,6 +6,8 @@
 **Status:** Working decisions from `brief/2.md` are accepted unless changed below.  
 **Answer style:** Reply with the proposed decision, or write `ACCEPT DEFAULT`.
 
+> **Non-binding design backlog:** This document contains open questions and recommendations only. It does not authorize gameplay behavior. For Checkpoint 1, `nce-classic-v01-checkpoint-1.md` is the sole implementation authority. Nothing here becomes a rule until explicitly marked `APPROVED`.
+
 ---
 
 ## A. Already settled
