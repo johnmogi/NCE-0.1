@@ -4,7 +4,9 @@ import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react
 import { compareRuns, getDiagnosticLines, getElementDistribution, getRankDistribution, getRoomDistribution, getRunSummary, getValidationSummary, getValueDistribution, type RunComparison } from "@/admin/diagnostics";
 import { catalog, recordsOf } from "@/content/catalog";
 import { exportableRun, generateRun } from "@/engine/generate";
+import type { RuntimeState } from "@/engine/runtime/types";
 import type { ContentRecord, RunState } from "@/engine/types";
+import { PlayView } from "./PlayView";
 
 const heroes = recordsOf("hero");
 const roomLabels = { start: "START", royal: "ROYAL", challenger: "CHALLENGE", barrier: "BARRIER", treasure: "TREASURE" } as const;
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
   const [failures, setFailures] = useState(0);
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [consoleHeight, setConsoleHeight] = useState(210);
+  const [runtime, setRuntime] = useState<RuntimeState | null>(null);
   const activeHero = heroes.find((hero) => hero.id === heroId) ?? heroes[0];
   const selectedTile = run?.tiles.find((tile) => tile.roomId === selectedRoomId);
   const selected = selectedTile?.content ?? null;
@@ -60,6 +63,7 @@ export default function AdminDashboard() {
       setError("");
       setSeed(String(next.seed));
       setHeroId(next.heroId);
+      setRuntime(null);
       remember(next);
     } catch (cause) {
       setFailures((count) => count + 1);
@@ -94,6 +98,7 @@ export default function AdminDashboard() {
     setPreviousRun(null);
     setSelectedRoomId(null);
     setError("");
+    setRuntime(null);
     setView("godmode");
   }
 
@@ -120,7 +125,7 @@ export default function AdminDashboard() {
       <aside className="inspector-rail"><div className="section-kicker">LIVE OUTPUT <span>03</span></div><div className="inspector-title"><h2>INSPECTOR</h2><span className="inspector-status">{selectedTile ? "SELECTED" : "IDLE"}</span></div>{selectedTile ? <InspectorBody tile={selectedTile} content={selected} /> : <div className="inspector-idle"><div className="idle-bracket">[&nbsp; ? &nbsp;]</div><strong>SELECT A TILE</strong><p>Click any generated room. Selection stays in the workbench and does not change the run.</p></div>}<Diagnostics summary={summary} checks={checks} run={run} comparison={comparison} recentCount={recent.length} failures={failures} royalFrequency={royalFrequency} /></aside>
       <section className="run-console" style={{ height: consoleOpen ? consoleHeight : 42 }}><button className="console-resize" aria-label="Resize console" onPointerDown={resizeConsole} /><div className="console-bar"><button onClick={() => setConsoleOpen((open) => !open)}>{consoleOpen ? "HIDE CONSOLE" : "SHOW CONSOLE"}</button><strong>RUN CONSOLE</strong><span>DIAGNOSTICS · NOT GAMEPLAY</span></div>{consoleOpen && <div className="console-body"><div><div className="section-kicker">DERIVED FROM RUN</div>{diagnostics.map((line) => <pre key={line.id}><b>{line.id.replace("diag-", "#")} {line.code}</b>{"\n"}{fields(line.fields)}</pre>)}{diagnostics.length === 0 && <p>Generate a run to derive diagnostic lines.</p>}</div><div><div className="section-kicker">ENGINE LOG</div>{run?.log.map((entry) => <pre key={entry.id}><b>{entry.id.replace("log-", "#")} {entry.action}</b>{"\n"}{entry.message}</pre>) ?? <p>The engine log is empty.</p>}<div className="section-kicker">WORKBENCH</div>{notes.map((entry) => <pre key={entry.id}><b>{entry.code}</b>{"\n"}{entry.detail}</pre>)}{notes.length === 0 && <p>Copy and export notes appear here.</p>}</div></div>}</section></div>}
     {view === "compendium" && <Compendium records={visibleRecords} filter={compendiumFilter} setFilter={setCompendiumFilter} />}
-    {view === "play" && <PlayPreview run={run} hero={activeHero} />}
+    {view === "play" && <PlayView run={run} hero={run ? (heroes.find((item) => item.id === run.heroId) ?? activeHero) : activeHero} runtime={runtime} onRuntime={setRuntime} />}
     {view === "data" && <RunData run={run} onCopy={() => { void copyJson(); }} onExport={exportJson} />}
   </section><footer className="app-footer"><span>NCE // ADMIN WORKBENCH v0.2</span><span>CONTENT v1 · RULES v1 · LOCAL SESSION</span></footer></main>;
 }
@@ -148,10 +153,6 @@ function Diagnostics({ summary, checks, run, comparison, recentCount, failures, 
 function Compendium({ records, filter, setFilter }: { records: ContentRecord[]; filter: ContentRecord["type"] | "all"; setFilter: (filter: ContentRecord["type"] | "all") => void }) {
   const filters: Array<ContentRecord["type"] | "all"> = ["all", "hero", "challenger", "royal", "champion", "barrier", "treasure"];
   return <section className="compendium-view"><div className="compendium-head"><div><div className="section-kicker">NCE CLASSIC / CONTENT INDEX <span>02</span></div><h1>CONTENT COMPENDIUM</h1><p>76 records · four elemental lineages · the complete LV00 catalog.</p></div><div className="catalog-count"><strong>{records.length}</strong><span>VISIBLE RECORDS</span></div></div><div className="filter-row">{filters.map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "all" ? "ALL RECORDS" : item.toUpperCase()}</button>)}</div><div className="record-grid">{records.map((record) => <article className={`record-card element-${record.element}`} key={record.id}><div className="record-meta"><span>{record.type.toUpperCase()}</span><b>{record.rank}</b></div><div className="record-icon">{elementGlyph[record.element]}</div><h2>{record.name}</h2><p>{record.family} · {record.element} lineage</p><div className="record-footer"><span>{record.id}</span><strong>VALUE {record.value}</strong></div></article>)}</div></section>;
-}
-
-function PlayPreview({ run, hero }: { run: RunState | null; hero: ContentRecord }) {
-  return <section className="play-view"><div className="preview-banner"><div><div className="section-kicker">STATIC PREVIEW / FUTURE SURFACE <span>03</span></div><h1>PLAY MODE <em>DEFERRED</em></h1><p>Read-only orientation. Barrier resolution and the rest of play are not in this workbench.</p></div><div className="preview-stamp">NOT<br />CONNECTED</div></div><div className="play-layout"><div className="player-card"><div className="section-kicker">ACTIVE ACE</div><div className="player-icon">{elementGlyph[hero.element]}</div><h2>{hero.name}</h2><p>{hero.family} · {hero.element} lineage</p><div className="fake-stats"><span>HP <b>DEFERRED</b></span><span>HAND <b>DEFERRED</b></span><span>SUGAR <b>DEFERRED</b></span></div></div><div className="path-preview"><div className="section-kicker">ADVENTURE PATH / READ ONLY</div><div className="path-line">{(run?.tiles ?? []).map((tile) => <div key={tile.roomId} className={`path-node ${tile.roomType}`}><span>{tile.roomType === "royal" ? "♛" : tile.roomType === "start" ? "⌄" : "·"}</span><small>{tile.roomId.replace("room-", "")}</small></div>)}</div><div className="preview-note">The 3 × 5 board is visible here as orientation only. It does not move a hero.</div></div></div></section>;
 }
 
 function RunData({ run, onCopy, onExport }: { run: RunState | null; onCopy: () => void; onExport: () => void }) {
