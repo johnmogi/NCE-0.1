@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "NCE / Adam's Boring Field Guide",
-  description: "NCE Classic v0.1 Admin Engine",
+  title: "NCE",
+  description: "NCE product shell. Play, Forge, and Codex.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

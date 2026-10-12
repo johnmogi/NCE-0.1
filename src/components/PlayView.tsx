@@ -64,8 +64,8 @@ export function PlayView({ run, hero, heroes, seed, heroId, runtime, onSeed, onH
   return <section className="play-view">
     <div className="preview-banner">
       <div>
-        <div className="section-kicker">PLAY <span>01</span></div>
-        <h1>NCE CLASSIC <em>RULES v0.1</em></h1>
+        <div className="section-kicker">NCE</div>
+        <h1>PLAY <em>Prototype Rules 0.1</em></h1>
         <p>Prototype playtest. Support cards, health, and targets are temporary numbers, not catalog canon. {PROTOTYPE_RULES_VERSION}</p>
       </div>
       <div className="play-setup">
