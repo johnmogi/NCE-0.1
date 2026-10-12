@@ -1,286 +1,132 @@
-# NCE CLASSIC v0.1
+# NCE CLASSIC
 
-## Checkpoint 1 - Approved Admin Engine Skeleton
+## Frozen playable prototype
 
-**Status:** APPROVED  
-**Scope:** Deterministic board generation, transparent GODMODE inspection, and JSON export  
-**Gameplay resolution:** Not implemented
+**Status:** KEEP. Implementation is frozen pending playtest.  
+**Rules label:** `prototype-rules-0.1`  
+**Reviewed build:** commit `44` (`897c766`)  
+**This file is the contract of what exists.** It is not permission to add the next system.
 
-## Authority
-
-This document is the implementation authority for Checkpoint 1.
-
-If another document conflicts with this one, this document wins for the Checkpoint 1 milestone. The decision interview is a design backlog only; its recommendations are not implementation requirements until separately approved.
+Prototype numbers are a playtest. They are not catalog canon. The 76-record catalog was not rewritten to fit them.
 
 ---
 
-## 1. Platform
+## 1. Product
 
-- Local Next.js application
-- React UI
-- TypeScript engine
-- Browser-based Admin interface
-- No external service required
-- No database required for Checkpoint 1
-
----
-
-## 2. Board Contract
-
-### Layout
-
-- Board size: 3 columns x 5 rows
-- Total tiles: 15
-- Start: bottom-center tile
-- Exit: top-center tile
-- Movement: orthogonal only
-- Diagonal movement: prohibited
-- Optional branches: allowed
-
-### Required generation mix
+PLAY is the primary surface. The order is:
 
 ```text
-1 Start
-1 Royal Boss / Exit
-4 Treasure
-4 Barrier
-5 Challenger
+PLAY
+GODMODE
+CONTENT
+RUN DATA
 ```
 
-### Route guarantee
-
-The generator must guarantee at least one valid orthogonal path from the bottom-center Start tile to the top-center Royal Boss / Exit tile before returning a board state.
-
-The path validator must run as part of generation. An invalid board must be rejected and regenerated or reported as an engine error.
+GODMODE inspects a generated board and does not resolve rooms. Diagnostics, the Compendium, replay, and JSON export remain. They are not the game.
 
 ---
 
-## 3. Hero Contract
+## 2. Board
 
-The Admin chooses one of four Ace Heroes:
+- 3 columns by 5 rows. Fifteen tiles.
+- Start is the bottom-center tile, E1, `room-4-1`.
+- Royal is the top-center tile, A1, `room-0-1`.
+- Movement is orthogonal. There are no diagonals and no walls.
+- The generator guarantees one orthogonal route from Start to Royal.
+- Room mix: 1 Start, 1 Royal, 4 Treasure, 4 Barrier, 5 Challenger.
+- The same seed and hero regenerate the same board.
+- Gameplay draws use a separate seed stream and do not change the board.
+- The board is fully visible. There is no fog.
 
-- Ace of Air
-- Ace of Fire
-- Ace of Water
-- Ace of Earth
-
-The selected Hero is stored in the generated run state and included in the export.
-
-No hero combat, stats resolution, or card economy is implemented in this checkpoint.
-
----
-
-## 4. GODMODE Contract
-
-GODMODE renders the complete board transparently.
-
-Clicking a tile:
-
-- Reveals or displays its generated content.
-- Opens the tile inspector.
-- Displays content ID, room ID, type, element, value, name, and payload.
-- Adds a UI inspection event to the event log if logging is enabled.
-
-Clicking a tile must not:
-
-- Resolve a Barrier.
-- Resolve a Treasure.
-- Resolve a Challenger.
-- Spend health.
-- Spend or draw cards.
-- Change gameplay state.
-- Mark the room as exhausted.
-
-If the interface stores an inspected flag, it is a GODMODE UI flag only and must not be treated as gameplay state.
+Rooms outside the guaranteed route are optional. A cleared room stays cleared and may be crossed. A pending room cannot be left.
 
 ---
 
-## 5. Interface Contract
+## 3. Hero and support deck
 
-The first screen contains:
+The Ace is the hero. Elements are Air, Fire, Water, and Earth.
 
 ```text
-Header
-  NCE / Adam's Boring Field Guide
-  Build version
-  Seed
-  Generate
-  Reset
-  Copy JSON
-  Export Run
-
-Settings
-  Seed input
-  Board size display
-  Selected Ace Hero
-  Adventure / content package
-  Rules status: resolution deferred
-
-Grid / GODMODE
-  3 x 5 board
-  Start marker
-  Royal boss / exit marker
-  Tile type and content display
-  Tile inspector
-
-Stats
-  Runs
-  Win percentage: unavailable / not implemented
-  Hero
-  Board dimensions
-  Content counts
-
-Event Log
-  Generation events
-  Validation events
-  Tile inspection events
-  Export and reset events
+basePower = 1
+health = 3
+maxHealth = 3
 ```
 
-The `PLAY / GODMODE` control may be visible, but `PLAY` is disabled and labeled `COMING SOON`.
+There are no classes, abilities, or experience.
 
-Required actions:
+The support deck is not the encounter catalog. It is 32 cards: each element, values 2 through 9. A card is `id`, `element`, and `value`, for example `support-air-6`.
 
-- `GENERATE`
-- `PLAY / GODMODE`
-- `RESET`
-- `SIMULATE` may be visible but disabled until gameplay resolvers exist
-- `COPY JSON`
-- `EXPORT RUN`
+The deck is shuffled from the run seed and the hero. Opening hand is 4. Maximum hand is 6. The runtime tracks `drawPile`, `hand`, `discardPile`, and `health`.
 
 ---
 
-## 6. Content Contract
+## 4. The check
 
-Content is static JSON and remains separate from engine logic.
-
-The first content package contains:
-
-- 4 Ace Heroes
-- 32 Challengers
-- 12 Royal Bosses
-- 4 Joker Champions
-- 12 Barriers
-- 12 Treasures / Item / Spell reward records
-
-Joker Champion mechanics remain deferred. They may exist in the content catalog but must not be assigned gameplay behavior by the developer.
-
-Every room uses a stable `roomId` and a stable `contentId`.
-
-Every content record includes future art-production fields where applicable:
-
-```json
-{
-  "id": "earth-4-challenger",
-  "type": "challenger",
-  "rank": "4",
-  "value": 4,
-  "element": "earth",
-  "name": "Cursed Golden Coffee-Dung Beetle",
-  "family": "earth-folklore",
-  "tags": ["beetle", "cursed", "folklore"],
-  "artStatus": "NOT_STARTED",
-  "artPrompt": "",
-  "referenceImage": "",
-  "finalFilename": ""
-}
+```text
+Water beats Fire
+Fire beats Earth
+Earth beats Air
+Air beats Water
 ```
 
-The engine may read content records, but must not modify the content catalog during generation.
+Advantage is +2. Neutral is 0. Disadvantage is −2. Neutral means neither element beats the other. The committed card is compared with the encounter. The hero's element does not add a second modifier.
+
+```text
+TOTAL = 1 + card value + element modifier
+```
+
+Success is `TOTAL >= target`. A tie succeeds. The arithmetic is shown before the card is played.
+
+| Room | Successes required | Target |
+|---|---:|---|
+| Barrier | 1 | catalog value |
+| Challenger | 2 | catalog value |
+| Royal | 3 | catalog value − 3 |
+
+Jack 10, Queen 11, and King 12 therefore play as targets 7, 8, and 9. That conversion lives only in `encounterTarget()`. The catalog values stay 10, 11, and 12.
+
+A failed check discards the card, draws one replacement, costs 1 HP, and does not advance the round. At 0 HP the run ends as `HEALTH_DEPLETED` before that replacement draw. If a required draw cannot be completed, the run ends as `DECK_EXHAUSTED` and the room does not clear. There is no reshuffle and no retreat.
+
+Treasure draws two support cards. The player keeps one and discards the other. The treasure name is flavor. If the hand is already 6, the player discards one hand card before the kept card is added.
+
+A turn is a move. Playing a card does not advance the turn.
 
 ---
 
-## 7. Determinism and State
+## 5. Endings
 
-Same seed plus same settings must generate identical board and content placement.
+The Royal's third success ends the run as a victory and shows turns, rooms visited, barriers, treasures, challengers, cards used, and HP remaining.
 
-The run state must include:
-
-- `runId`
-- `seed`
-- `contentVersion`
-- `rulesVersion`
-- selected Hero ID
-- board dimensions
-- tile list
-- route validation result
-- event log
-- generation timestamp
-
-The timestamp must not affect deterministic content generation.
-
-Every room must include:
-
-- `roomId`
-- grid coordinate
-- room type
-- content ID
-- element where applicable
-- value where applicable
-- generated display name
-- generation metadata
+Restart deals the same deck on the same board. Generate replaces the board.
 
 ---
 
-## 8. Export Contract
+## 6. Engine
 
-`COPY JSON` copies the complete current run state to the clipboard.
+Gameplay rules are pure TypeScript under `src/engine/runtime/`:
 
-`EXPORT RUN` downloads the same state as a `.json` file.
+```text
+types.ts
+actions.ts
+deck.ts
+elements.ts
+resolver.ts
+```
 
-The exported JSON must be sufficient to inspect the generated board without rerunning generation.
+Commands are `START_PLAY`, `MOVE`, `COMMIT_CARD`, `CHOOSE_TREASURE`, and `RESET_PLAY`. Events are separate from commands. React renders the state. It does not own the rules.
 
-Import is not required yet, but the state shape must be versioned so import can be added later.
-
----
-
-## 9. Validation and Test Gate
-
-The engine must reject or report:
-
-- Missing or invalid seed
-- Invalid Hero ID
-- Incorrect tile count
-- Missing Start tile
-- Missing Royal Boss / Exit tile
-- Incorrect room distribution
-- Duplicate room IDs
-- Duplicate content IDs, unless the content definition explicitly permits duplication
-- Invalid tile coordinates
-- No valid Start-to-Exit path
-- Missing content record
-
-Checkpoint 1 passes when:
-
-1. The app boots locally.
-2. An Admin selects one Ace Hero.
-3. A seed generates a 3 x 5 board.
-4. The board contains exactly the approved room mix.
-5. A valid orthogonal Start-to-Exit path is confirmed.
-6. Reusing the same seed and settings reproduces the same generated state.
-7. GODMODE reveals tile content without resolving gameplay.
-8. Stable room and content IDs appear in the inspector and event log.
-9. JSON copy and export work.
-10. PLAY and SIMULATE remain visibly deferred rather than partially implemented.
+`heroRoomId` and `currentRoomId` are redundant. Leave them.
 
 ---
 
-## 10. Deliberately Deferred
+## 7. Content
 
-- Barrier resolution
-- Treasure use
-- Hand lifecycle
-- Challenger resolution
-- Combat
-- Health changes
-- Card drawing or discarding
-- Win percentage
-- Simulation statistics
-- Player fog of war
-- Room exhaustion as gameplay state
-- Persistence beyond browser/session storage
-- Database integration
+Static catalog, 76 records: 4 heroes, 32 challengers, 12 royals, 4 champions, 12 barriers, 12 treasures. Champions are catalog records only. They have no gameplay.
 
-No content record may appear more than once in a generated run unless its content definition explicitly permits duplication. The current NCE Classic content package does not permit duplication, so the 15 generated rooms must use distinct content records where a room has a content record.
+The engine reads the catalog and does not modify it.
 
-The next design contract should define Barrier resolution, followed by Treasure / hand economy, followed by the Challenger loop.
+---
+
+## 8. Still out
+
+Champions as playable characters, hero abilities, treasure magic, equipment, inventory, XP, resurrection, multiplayer, enemy HP, enemy AI, procedural story, animation, sound, fog, walls, Dungeo mechanics, Mesahara, simulation bots, and balance tuning.
