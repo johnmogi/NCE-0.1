@@ -1,8 +1,9 @@
 import "./globals.css";
+import "../product/nce.css";
 
 export const metadata = {
   title: "NCE",
-  description: "NCE product shell. Play, Forge, and Codex.",
+  description: "NCE. Codex is the current product surface.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,3 +1,4 @@
+/** Prototype A interface. Preserved as reference. The NCE product does not mount this file. */
 "use client";
 
 import { useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
