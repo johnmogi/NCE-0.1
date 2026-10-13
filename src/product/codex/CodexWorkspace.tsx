@@ -6,9 +6,11 @@ import { CodexFilters } from "./CodexFilters";
 import { CodexList } from "./CodexList";
 import { CodexRecord } from "./CodexRecord";
 import { CodexSidebar } from "./CodexSidebar";
+import { useWorld } from "@/product/session/WorldContext";
 import { EMPTY_QUERY, describeQuery, distinctArtStatuses, distinctFamilies, distinctRanks, distinctValues, filterCodex, type CodexQuery } from "./codex";
 
 export function CodexWorkspace({ onNotice }: { onNotice: (code: string, detail: string) => void }) {
+  const { codexFocus } = useWorld();
   const [query, setQuery] = useState<CodexQuery>(EMPTY_QUERY);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const loaded = useRef(false);
@@ -21,6 +23,12 @@ export function CodexWorkspace({ onNotice }: { onNotice: (code: string, detail: 
     loaded.current = true;
     onNotice("CODEX_LOADED", `records=${catalog.length}`);
   }, [onNotice]);
+
+  useEffect(() => {
+    if (!codexFocus) return;
+    setSelectedId(codexFocus.id);
+    setQuery(EMPTY_QUERY);
+  }, [codexFocus]);
 
   const queryDetail = describeQuery(query);
   useEffect(() => {
